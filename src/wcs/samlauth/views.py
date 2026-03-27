@@ -7,6 +7,7 @@ from urllib.parse import quote
 from urllib.parse import urlparse
 from zExceptions import BadRequest
 from zope.interface import alsoProvides
+import json
 import logging
 
 
@@ -19,6 +20,7 @@ class BaseSamlView(BrowserView):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.saml_request = self._prepare_request()
+        self.context._maybe_refresh_metadata()
         self.settings = self.context.load_settings()
         self._update_settings()
 
@@ -171,3 +173,24 @@ class RequireLoginView(BrowserView):
             url += '/insufficient-privileges'
 
         self.request.response.redirect(url)
+
+
+class RefreshIdPMetadataView(BrowserView):
+    """Trigger an immediate IDP metadata refresh from the stored metadata_url."""
+
+    def __call__(self):
+        alsoProvides(self.request, IDisableCSRFProtection)
+        self.request.response.setHeader('X-Theme-Disabled', '1')
+        self.request.response.setHeader('Content-Type', 'application/json')
+
+        url = self.context.getProperty('metadata_url', '')
+        if not url:
+            self.request.response.setStatus(400)
+            return json.dumps({'status': 'error', 'message': 'No metadata URL configured'})
+
+        success, result = self.context.refresh_metadata()
+        if success:
+            return json.dumps({'status': 'ok', 'refreshed_at': result, 'url': url})
+        else:
+            self.request.response.setStatus(500)
+            return json.dumps({'status': 'error', 'message': result, 'url': url})

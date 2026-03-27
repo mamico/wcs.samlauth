@@ -82,6 +82,7 @@ class LoadIdPMetadataForm(form.Form):
 
         if data['metadata_url']:
             self.idp_data = self._fetch_metadata(data['metadata_url'])
+            self.context.manage_changeProperties(metadata_url=data['metadata_url'])
             msg = _(
                 'text_get_and_store',
                 default=u'IDP/SP Data has been fetched and stored in plugin settings.'

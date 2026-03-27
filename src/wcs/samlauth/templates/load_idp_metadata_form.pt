@@ -21,4 +21,31 @@
                 <metal:slot fill-slot="actions" />
             </metal:form>
         </div>
+
+        <div class="row" style="margin-top: 2em; border-top: 1px solid #ddd; padding-top: 1em;">
+            <h2>Auto-refresh</h2>
+            <dl class="dl-horizontal">
+                <dt>Metadata URL</dt>
+                <dd tal:content="python: context.getProperty('metadata_url') or '—'" />
+
+                <dt>Auto-refresh</dt>
+                <dd tal:condition="context/metadata_auto_refresh">
+                    Enabled — interval: <span tal:content="context/metadata_refresh_interval" /> seconds
+                </dd>
+                <dd tal:condition="not: context/metadata_auto_refresh">Disabled</dd>
+
+                <dt>Last refresh</dt>
+                <dd tal:content="python: context.getProperty('metadata_last_refreshed') or 'never'" />
+            </dl>
+
+            <p tal:condition="context/metadata_url">
+                <a class="btn btn-default"
+                   tal:attributes="href string:${context/absolute_url}/@@refresh_idp_metadata">
+                    Refresh now
+                </a>
+            </p>
+            <p class="discreet">
+                Auto-refresh and interval can be configured via the plugin properties (ZMI).
+            </p>
+        </div>
 </html>
