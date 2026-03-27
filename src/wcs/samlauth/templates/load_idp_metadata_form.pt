@@ -11,8 +11,24 @@
             <metal:form use-macro="context/@@ploneform-macros/titlelessform">
                 <metal:slot fill-slot="fields">
                     <div tal:content="structure view/widgets/metadata_url/@@ploneform-render-widget" />
-                    <div tal:content="structure view/widgets/metadata_file/@@ploneform-render-widget" />
-                    <metal:block use-macro="context/@@ploneform-macros/actions"/>
+                    <div tal:condition="not: context/metadata_auto_refresh"
+                         tal:content="structure view/widgets/metadata_file/@@ploneform-render-widget" />
+
+                    <div class="formControls">
+                        <input class="submit-widget button-field btn btn-default"
+                               type="submit"
+                               name="form.buttons.get"
+                               value="Get Metadata" />
+                        <tal:block tal:condition="not: context/metadata_auto_refresh">
+                            <input class="submit-widget button-field btn btn-primary"
+                                   type="submit"
+                                   name="form.buttons.get_and_store"
+                                   value="Get and store metadata" />
+                        </tal:block>
+                        <span class="discreet" tal:condition="context/metadata_auto_refresh">
+                            Auto-refresh is enabled — only the URL can be changed. Disable auto-refresh to update metadata manually.
+                        </span>
+                    </div>
 
                     <div class="idp-data" tal:condition="view/idp_data">
                         <pre><code tal:content="structure view/formatted_idp_metadata" /></pre>

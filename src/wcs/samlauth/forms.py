@@ -76,6 +76,16 @@ class LoadIdPMetadataForm(form.Form):
 
     @button.buttonAndHandler(_(u'label_get_and_metadata', default=u'Get and store metadata'), name='get_and_store')
     def get_and_store(self, action):
+        if self.context.getProperty('metadata_auto_refresh'):
+            IStatusMessage(self.request).addStatusMessage(
+                _(
+                    'error_auto_refresh_enabled',
+                    default=u'Auto-refresh is enabled. Disable it before manually updating metadata.',
+                ),
+                type='warning',
+            )
+            return
+
         data, errors = self.extractData()
         if errors:
             return
