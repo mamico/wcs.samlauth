@@ -350,3 +350,75 @@ This is a tutorial on how to configure a Google Workspace Enterprise App as an I
 **THAT'S IT!! Go to http://localhost:8080/Plone/acl_users/saml/sls to log in via Google Workspace.**
 
 If this is the only SAML plugin on your site and you want all users to log in via SAML, you can enable the Challenge Plugin and change the login and logout actions on your Plone site to use the SAML endpoints.
+
+## Signed AuthnRequests
+
+Some IDPs require the SP to sign its AuthnRequests. This is declared in the IDP metadata as `WantAuthnRequestsSigned="true"`. Examples include Federa (Lepida) and many national/federated identity providers.
+
+**Important:** the plugin intentionally does **not** apply this setting automatically when fetching IDP metadata, to avoid silently breaking authentication. It must be configured manually.
+
+### 1. Generate an SP certificate and private key
+
+If you do not already have a certificate for the SP, generate a self-signed one:
+
+```shell
+openssl req -x509 -newkey rsa:2048 -keyout sp.key -out sp.crt -days 3650 -nodes \
+    -subj "/CN=my-plone-sp"
+```
+
+Extract the certificate and key content without headers or newlines:
+
+```shell
+# certificate (strip header/footer and newlines)
+grep -v "^-----" sp.crt | tr -d '\n'
+
+# private key (strip header/footer and newlines)
+grep -v "^-----" sp.key | tr -d '\n'
+```
+
+### 2. Add the certificate and key to the SP settings
+
+In the ZMI, open the SAML plugin and go to the **Properties** tab. Edit the `settings_sp` field and set the `x509cert` and `privateKey` values:
+
+```json
+{
+    "sp": {
+        "...": "...",
+        "x509cert": "<paste certificate content here, single line, no headers>",
+        "privateKey": "<paste private key content here, single line, no headers>"
+    }
+}
+```
+
+### 3. Enable AuthnRequest signing in the advanced settings
+
+In the same Properties tab, edit the `advanced` field and set `authnRequestsSigned` to `true` in the `security` section:
+
+```json
+{
+    "security": {
+        "authnRequestsSigned": true,
+        "...": "..."
+    }
+}
+```
+
+The default signature algorithm is `rsa-sha256` and digest algorithm is `sha256`, which is acceptable for most IDPs. If your IDP requires different algorithms, adjust `signatureAlgorithm` and `digestAlgorithm` accordingly.
+
+### 4. Register the SP metadata with the IDP
+
+The IDP needs the SP's public certificate to verify the signature. After completing steps 2 and 3, fetch the updated SP metadata from:
+
+```
+http://localhost:8080/Plone/acl_users/saml/metadata
+```
+
+Register this metadata (or at least the certificate) with your IDP. The SP metadata will include `AuthnRequestsSigned="true"` and expose the public certificate in the `KeyDescriptor` element.
+
+### Verification
+
+After configuration, trigger a login via `http://localhost:8080/Plone/acl_users/saml/sls`. Check the Plone logs for any signature errors. If the IDP rejects the request, verify that:
+
+- The certificate registered with the IDP matches the one in `x509cert`
+- The `privateKey` corresponds to the `x509cert`
+- The signature algorithm is accepted by the IDP

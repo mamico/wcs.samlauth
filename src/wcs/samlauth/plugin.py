@@ -1,6 +1,12 @@
 from AccessControl.class_init import InitializeClass
 from AccessControl.SecurityInfo import ClassSecurityInfo
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
 from onelogin.saml2.idp_metadata_parser import OneLogin_Saml2_IdPMetadataParser
 from plone import api
@@ -226,6 +232,46 @@ class SamlAuthPlugin(BasePlugin):
                 'settings_sp': json.dumps({'sp': settings_sp}, indent=4),
             }
         )
+
+    def generate_sp_certificate(self, key_size=2048, days_valid=3650):
+        """Generate a self-signed SP certificate and private key and store them
+        in settings_sp. Any existing certificate and key will be replaced.
+        """
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=key_size,
+        )
+        common_name = self.absolute_url()
+        subject = issuer = x509.Name([
+            x509.NameAttribute(NameOID.COMMON_NAME, common_name),
+        ])
+        now = datetime.now(timezone.utc)
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(issuer)
+            .public_key(private_key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now)
+            .not_valid_after(now + timedelta(days=days_valid))
+            .sign(private_key, hashes.SHA256())
+        )
+        cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode('utf-8')
+        key_pem = private_key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        ).decode('utf-8')
+
+        # python3-saml expects base64 content without PEM headers or newlines
+        cert_b64 = ''.join(cert_pem.strip().splitlines()[1:-1])
+        key_b64 = ''.join(key_pem.strip().splitlines()[1:-1])
+
+        sp_settings = json.loads(self.getProperty('settings_sp'))
+        sp_settings['sp']['x509cert'] = cert_b64
+        sp_settings['sp']['privateKey'] = key_b64
+        self.manage_changeProperties(settings_sp=json.dumps(sp_settings, indent=4))
+        logger.info('Generated new SP certificate (CN=%s, valid %d days)', common_name, days_valid)
 
     def _maybe_refresh_metadata(self):
         if not self.getProperty('metadata_auto_refresh'):

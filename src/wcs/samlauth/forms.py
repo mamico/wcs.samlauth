@@ -109,6 +109,10 @@ class LoadIdPMetadataForm(form.Form):
 
         IStatusMessage(self.request).addStatusMessage(msg, type='info')
 
+    def has_sp_certificate(self):
+        sp_settings = json.loads(self.context.getProperty('settings_sp'))
+        return bool(sp_settings.get('sp', {}).get('x509cert', ''))
+
     def formatted_idp_metadata(self):
         if self.idp_data:
             return json.dumps(self.idp_data, indent=4)

@@ -39,6 +39,24 @@
         </div>
 
         <div class="row" style="margin-top: 2em; border-top: 1px solid #ddd; padding-top: 1em;">
+            <h2>SP Certificate</h2>
+            <p tal:condition="view/has_sp_certificate" class="discreet">
+                A certificate is already configured.
+                Generating a new one will replace it — remember to re-register the SP metadata with your IDP.
+            </p>
+            <p tal:condition="not: view/has_sp_certificate" class="discreet">
+                No SP certificate configured.
+                A certificate is required to sign AuthnRequests (needed by some IDPs).
+            </p>
+            <p>
+                <a class="btn btn-default"
+                   tal:attributes="href string:${context/absolute_url}/@@generate_sp_certificate">
+                    Generate SP certificate
+                </a>
+            </p>
+        </div>
+
+        <div class="row" style="margin-top: 2em; border-top: 1px solid #ddd; padding-top: 1em;">
             <h2>Auto-refresh</h2>
             <dl class="dl-horizontal">
                 <dt>Metadata URL</dt>

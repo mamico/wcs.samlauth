@@ -3,6 +3,7 @@ from onelogin.saml2.errors import OneLogin_Saml2_Error
 from plone import api
 from plone.protect.interfaces import IDisableCSRFProtection
 from Products.Five.browser import BrowserView
+from Products.statusmessages.interfaces import IStatusMessage
 from urllib.parse import quote
 from urllib.parse import urlparse
 from zExceptions import BadRequest
@@ -173,6 +174,31 @@ class RequireLoginView(BrowserView):
             url += '/insufficient-privileges'
 
         self.request.response.redirect(url)
+
+
+class GenerateSpCertificateView(BrowserView):
+    """Generate a self-signed SP certificate and private key, store them in
+    settings_sp, then redirect back to the IDP metadata management page.
+    """
+
+    def __call__(self):
+        alsoProvides(self.request, IDisableCSRFProtection)
+        try:
+            self.context.generate_sp_certificate()
+            IStatusMessage(self.request).addStatusMessage(
+                'SP certificate generated successfully. '
+                'Register the updated SP metadata with your IDP.',
+                type='info',
+            )
+        except Exception as e:
+            LOGGER.error('Failed to generate SP certificate: %s', e)
+            IStatusMessage(self.request).addStatusMessage(
+                f'Failed to generate SP certificate: {e}',
+                type='error',
+            )
+        return self.request.response.redirect(
+            self.context.absolute_url() + '/idp_metadata'
+        )
 
 
 class RefreshIdPMetadataView(BrowserView):
