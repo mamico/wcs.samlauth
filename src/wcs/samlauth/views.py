@@ -138,26 +138,57 @@ class LogoutView(BaseSamlView):
         return self.request.RESPONSE.redirect(logout_url)
 
 
+MD_NS = 'urn:oasis:names:tc:SAML:2.0:metadata'
+DS_NS = 'http://www.w3.org/2000/09/xmldsig#'
+
 ENCRYPTION_METHODS = [
     'http://www.w3.org/2009/xmlenc11#aes256-gcm',
     'http://www.w3.org/2001/04/xmlenc#aes256-cbc',
+    'http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p',
 ]
 
-MD_NS = 'urn:oasis:names:tc:SAML:2.0:metadata'
 
-
-def _add_encryption_methods(metadata):
-    """Add EncryptionMethod elements to the encryption KeyDescriptor."""
+def _postprocess_metadata(metadata):
+    """Fix ACS index and add encryption KeyDescriptor with EncryptionMethod elements."""
     from lxml import etree
+
     root = etree.fromstring(metadata if isinstance(metadata, bytes) else metadata.encode())
-    for kd in root.iter('{%s}KeyDescriptor' % MD_NS):
-        if kd.get('use') == 'encryption':
-            for alg in ENCRYPTION_METHODS:
-                etree.SubElement(
-                    kd,
-                    '{%s}EncryptionMethod' % MD_NS,
-                    Algorithm=alg,
-                )
+
+    spsso = root.find('{%s}SPSSODescriptor' % MD_NS)
+    if spsso is None:
+        return etree.tostring(root, encoding='unicode')
+
+    # 1. Fix AssertionConsumerService index: set to 0
+    for acs in spsso.iter('{%s}AssertionConsumerService' % MD_NS):
+        acs.set('index', '0')
+
+    # 2. Ensure encryption KeyDescriptor exists with EncryptionMethod elements.
+    #    If one already exists (e.g. added by the library), just add the methods.
+    #    Otherwise, copy the cert from the signing KeyDescriptor and add a new one.
+    enc_kd = None
+    signing_kd = None
+    for kd in spsso.findall('{%s}KeyDescriptor' % MD_NS):
+        use = kd.get('use')
+        if use == 'encryption':
+            enc_kd = kd
+        elif use == 'signing':
+            signing_kd = kd
+
+    if enc_kd is None and signing_kd is not None:
+        # Build encryption KeyDescriptor after the signing one, reusing its cert
+        enc_kd = etree.Element('{%s}KeyDescriptor' % MD_NS, use='encryption')
+        key_info = signing_kd.find('{%s}KeyInfo' % DS_NS)
+        if key_info is not None:
+            import copy
+            enc_kd.append(copy.deepcopy(key_info))
+        signing_kd.addnext(enc_kd)
+
+    if enc_kd is not None:
+        existing_algs = {em.get('Algorithm') for em in enc_kd.findall('{%s}EncryptionMethod' % MD_NS)}
+        for alg in ENCRYPTION_METHODS:
+            if alg not in existing_algs:
+                etree.SubElement(enc_kd, '{%s}EncryptionMethod' % MD_NS, Algorithm=alg)
+
     return etree.tostring(root, encoding='unicode')
 
 
@@ -170,7 +201,7 @@ class MetadataView(BaseSamlView):
         errors = saml_settings.validate_metadata(metadata)
 
         if len(errors) == 0:
-            metadata = _add_encryption_methods(metadata)
+            metadata = _postprocess_metadata(metadata)
             self.request.response.setHeader('Content-Type', 'application/xml')
             return metadata
         else:
