@@ -138,6 +138,29 @@ class LogoutView(BaseSamlView):
         return self.request.RESPONSE.redirect(logout_url)
 
 
+ENCRYPTION_METHODS = [
+    'http://www.w3.org/2009/xmlenc11#aes256-gcm',
+    'http://www.w3.org/2001/04/xmlenc#aes256-cbc',
+]
+
+MD_NS = 'urn:oasis:names:tc:SAML:2.0:metadata'
+
+
+def _add_encryption_methods(metadata):
+    """Add EncryptionMethod elements to the encryption KeyDescriptor."""
+    from lxml import etree
+    root = etree.fromstring(metadata if isinstance(metadata, bytes) else metadata.encode())
+    for kd in root.iter('{%s}KeyDescriptor' % MD_NS):
+        if kd.get('use') == 'encryption':
+            for alg in ENCRYPTION_METHODS:
+                etree.SubElement(
+                    kd,
+                    '{%s}EncryptionMethod' % MD_NS,
+                    Algorithm=alg,
+                )
+    return etree.tostring(root, encoding='unicode')
+
+
 class MetadataView(BaseSamlView):
     def __call__(self):
         self.request.response.setHeader('X-Theme-Disabled', '1')
@@ -147,6 +170,7 @@ class MetadataView(BaseSamlView):
         errors = saml_settings.validate_metadata(metadata)
 
         if len(errors) == 0:
+            metadata = _add_encryption_methods(metadata)
             self.request.response.setHeader('Content-Type', 'application/xml')
             return metadata
         else:
