@@ -65,6 +65,7 @@ class SamlAuthPlugin(BasePlugin):
     create_user = True
     update_user = True
     validate_authn_request = False
+    userid_attribute = ''
     allowed_redirect_hosts = ()
     settings_sp = json.dumps(json.loads(clean_for_json(DEFAULT_SP_SETTINGS)), indent=4)
     settings_idp = json.dumps(json.loads(clean_for_json(DEFAULT_IDP_SETTINGS)), indent=4)
@@ -82,6 +83,7 @@ class SamlAuthPlugin(BasePlugin):
         dict(id='create_user', label='Create User', type='boolean', mode='w'),
         dict(id='update_user', label='Update User', type='boolean', mode='w'),
         dict(id='validate_authn_request', label='Validate AuthN requests via cookie', type='boolean', mode='w'),
+        dict(id='userid_attribute', label='SAML attribute used as user id (empty: NameID)', type='string', mode='w'),
         dict(id='allowed_redirect_hosts', label='Allowed hosts to redirect to', type='lines', mode='w'),
         dict(id='settings_sp', label='SP (plone) Settings', type='text', mode='w'),
         dict(id='settings_idp', label='IDP Settings', type='text', mode='w'),
@@ -98,10 +100,10 @@ class SamlAuthPlugin(BasePlugin):
         self.title = title
 
     def remember_identity(self, auth):
-        user_id = auth.get_nameid()
-        userinfo = auth.get_friendlyname_attributes()
-        if not userinfo:
-            userinfo = auth.get_attributes()
+        userinfo = self._get_userinfo(auth)
+        user_id = self._get_user_id(auth, userinfo)
+        if not user_id:
+            return
         pas = self._getPAS()
         if pas is None:
             return
@@ -148,6 +150,31 @@ class SamlAuthPlugin(BasePlugin):
 
         if user:
             notify(UserLoggedInEvent(user))
+
+    def _get_userinfo(self, auth):
+        """Return the SAML attributes keyed by Name and by FriendlyName.
+
+        Some IdPs (e.g. Lepida FedERa) set a FriendlyName only on a few
+        attributes, so using only one of the two sets loses attributes.
+        On key conflicts the FriendlyName wins.
+        """
+        userinfo = dict(auth.get_attributes())
+        userinfo.update(auth.get_friendlyname_attributes())
+        return userinfo
+
+    def _get_user_id(self, auth, userinfo):
+        """Return the NameID, or the value of the configured user id attribute."""
+        attribute = self.getProperty('userid_attribute', '').strip()
+        if not attribute:
+            return auth.get_nameid()
+
+        values = userinfo.get(attribute) or []
+        user_id = values[0].strip() if values else ''
+        if not user_id:
+            logger.error(
+                'SAML attribute %r configured as user id is missing or empty. '
+                'Available attributes: %s', attribute, sorted(userinfo))
+        return user_id
 
     def _updateUserProperties(self, user, userinfo):
         """Update the given user properties from the set of credentials.

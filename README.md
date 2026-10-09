@@ -150,6 +150,18 @@ ZCML:
 A default adapter, which supports mapping email and fullname is registered by the plugin.
 Any other attributes need to be implemented via custom adapters.
 
+`userinfo` contains all SAML attributes keyed by `Name`.
+Attributes with a `FriendlyName` are also keyed by their `FriendlyName`.
+
+## User id
+
+By default the Plone user id is the SAML `NameID`.
+Set the `userid_attribute` property of the plugin to use the value of a SAML attribute instead,
+for example `CodiceFiscale` with Lepida FedERa.
+The attribute is looked up by `Name` or `FriendlyName`.
+If the attribute is missing in the response, the user is not logged in and an error is logged.
+The NameID is never used as fallback, to avoid creating a second user for the same person.
+
 You can register multiple adapters and you can also override the values given
 by the default adapter. Just make sure `_order` attribut on the adapter is higher than 1.
 
