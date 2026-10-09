@@ -90,9 +90,9 @@ def _read_asset(name):
 class TestAssertionsInAdvice(TestCase):
 
     def setUp(self):
-        self.cert = OneLogin_Saml2_Utils.format_cert(_read_asset('sp.cer'), heads=False)
-        self.key = OneLogin_Saml2_Utils.format_private_key(
-            _read_asset('sp_private_key'), heads=False)
+        # xmlsec needs PEM headers to load the key pair.
+        self.cert = OneLogin_Saml2_Utils.format_cert(_read_asset('sp.cer'))
+        self.key = OneLogin_Saml2_Utils.format_private_key(_read_asset('sp_private_key'))
         self.settings = OneLogin_Saml2_Settings({
             'strict': True,
             'sp': {
