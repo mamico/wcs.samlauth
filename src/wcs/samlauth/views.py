@@ -1,4 +1,3 @@
-from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.errors import OneLogin_Saml2_Error
 from plone import api
 from plone.protect.interfaces import IDisableCSRFProtection
@@ -6,6 +5,7 @@ from Products.Five.browser import BrowserView
 from Products.statusmessages.interfaces import IStatusMessage
 from urllib.parse import quote
 from urllib.parse import urlparse
+from wcs.samlauth.saml import SamlAuth
 from zExceptions import BadRequest
 from zope.interface import alsoProvides
 import json
@@ -52,7 +52,7 @@ class BaseSamlView(BrowserView):
 class LoginView(BaseSamlView):
     def __call__(self):
         try:
-            auth = OneLogin_Saml2_Auth(self.saml_request, self.settings)
+            auth = SamlAuth(self.saml_request, self.settings)
         except OneLogin_Saml2_Error as error:
             LOGGER.error(str(error))
             self.request.response.setHeader('X-Theme-Disabled', '1')
@@ -78,7 +78,7 @@ class LoginView(BaseSamlView):
 class CallbackView(BaseSamlView):
     def __call__(self):
         alsoProvides(self.request, IDisableCSRFProtection)
-        auth = OneLogin_Saml2_Auth(self.saml_request, self.settings)
+        auth = SamlAuth(self.saml_request, self.settings)
         request_id = None
 
         if SAML_AUTHN_REQUEST_COOKIE_NAME in self.request:
@@ -120,7 +120,7 @@ class CallbackView(BaseSamlView):
 
 class IdpLogoutView(BaseSamlView):
     def __call__(self):
-        auth = OneLogin_Saml2_Auth(self.saml_request, self.settings)
+        auth = SamlAuth(self.saml_request, self.settings)
 
         def _logout():
             mt = api.portal.get_tool('portal_membership')
@@ -133,7 +133,7 @@ class IdpLogoutView(BaseSamlView):
 
 class LogoutView(BaseSamlView):
     def __call__(self):
-        auth = OneLogin_Saml2_Auth(self.saml_request, self.settings)
+        auth = SamlAuth(self.saml_request, self.settings)
         logout_url = auth.logout(return_to=api.portal.get().absolute_url())
         return self.request.RESPONSE.redirect(logout_url)
 
@@ -195,7 +195,7 @@ def _postprocess_metadata(metadata):
 class MetadataView(BaseSamlView):
     def __call__(self):
         self.request.response.setHeader('X-Theme-Disabled', '1')
-        auth = OneLogin_Saml2_Auth(self.saml_request, self.settings)
+        auth = SamlAuth(self.saml_request, self.settings)
         saml_settings = auth.get_settings()
         metadata = saml_settings.get_sp_metadata()
         errors = saml_settings.validate_metadata(metadata)

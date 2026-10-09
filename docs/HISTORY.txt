@@ -5,7 +5,9 @@ Changelog
 1.3.1 (unreleased)
 ------------------
 
-- Nothing changed yet.
+- Accept SAML responses with assertions nested in the ``saml:Advice`` element
+  of the signed top-level assertion (e.g. Lepida FedERa). python3-saml rejected
+  them with "SAML Response must contain 1 assertion". [mamico]
 
 
 1.3.0 (2026-01-29)
