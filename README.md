@@ -52,11 +52,15 @@ Given the ID of the SAML plugin is "saml":
 - SAML Logout endpoint is http://localhost:8080/Plone/acl_users/saml/slo
 - SAML SP initiated logout endpoint http://localhost:8080/Plone/acl_users/saml/logout
 - Fetch IDP metadata http://localhost:8080/Plone/acl_users/saml/idp_metadata
+- Refresh IDP metadata now (JSON response, Manager only) http://localhost:8080/Plone/acl_users/saml/refresh_idp_metadata
+- Generate a self-signed SP certificate (Manager only) http://localhost:8080/Plone/acl_users/saml/generate_sp_certificate
 
 ## Features
 
 - Fetch and store IDP metadata via IDP metadata endpoint
 - Upload and store IDP metadata via file upload
+- Automatic periodic refresh of the IDP metadata from its URL (see [IDP metadata auto-refresh](#idp-metadata-auto-refresh))
+- Generate a self-signed SP certificate and private key from the UI
 - Multiple saml plugins at the same time
 - Implements almost everything from python3-saml, this includes SP signing of the AuthnRequest and metadata
 - Create a plone session and/or restapi token
@@ -363,6 +367,40 @@ This is a tutorial on how to configure a Google Workspace Enterprise App as an I
 
 If this is the only SAML plugin on your site and you want all users to log in via SAML, you can enable the Challenge Plugin and change the login and logout actions on your Plone site to use the SAML endpoints.
 
+## IDP metadata auto-refresh
+
+IDPs rotate their signing certificates. To avoid manual updates, the plugin can re-fetch the IDP metadata from its URL and update the stored IDP settings.
+
+### Configuration
+
+1. Go to http://localhost:8080/Plone/acl_users/saml/idp_metadata, enter the metadata URL and click "Get and store metadata". The URL is saved in the `metadata_url` property.
+2. In the ZMI, open the SAML plugin, **Properties** tab, and set:
+
+| Property | Default | Description |
+| --- | --- | --- |
+| `metadata_auto_refresh` | `False` | Enable the automatic refresh. |
+| `metadata_refresh_interval` | `86400` | Minimum seconds between two refreshes. |
+| `metadata_url` | empty | IDP metadata URL. Without it nothing is refreshed. |
+| `metadata_last_refreshed` | empty | ISO timestamp of the last attempt. Set by the plugin. |
+
+### How it works
+
+- There is no scheduler. On every request to a SAML view (login, ACS, logout, metadata) the plugin checks if `metadata_refresh_interval` seconds have passed since `metadata_last_refreshed`. If so, it fetches the metadata and stores it.
+- The existing IDP settings are merged with the new data, they are not replaced.
+- If the fetch fails, a warning is logged and the old settings stay in place. `metadata_last_refreshed` is updated anyway, so the next attempt happens after one interval.
+- While auto-refresh is enabled, the manual "Get and store metadata" button and the file upload are disabled. Only the URL can be changed. Disable auto-refresh to update the metadata manually.
+- The `idp_metadata` page shows the URL, the interval and the last refresh time.
+
+### Refresh now
+
+Manager users can force a refresh with the "Refresh now" button on the `idp_metadata` page, or with:
+
+```
+http://localhost:8080/Plone/acl_users/saml/refresh_idp_metadata
+```
+
+The response is JSON: `{"status": "ok", "refreshed_at": "...", "url": "..."}` on success, or `{"status": "error", "message": "..."}` with HTTP 400 (no URL configured) or 500 (fetch failed).
+
 ## Signed AuthnRequests
 
 Some IDPs require the SP to sign its AuthnRequests. This is declared in the IDP metadata as `WantAuthnRequestsSigned="true"`. Examples include Federa (Lepida) and many national/federated identity providers.
@@ -371,7 +409,9 @@ Some IDPs require the SP to sign its AuthnRequests. This is declared in the IDP 
 
 ### 1. Generate an SP certificate and private key
 
-If you do not already have a certificate for the SP, generate a self-signed one:
+The simplest way is the "Generate SP certificate" button on the `idp_metadata` page. It creates a self-signed certificate (RSA 2048, 10 years, CN = plugin URL) and stores `x509cert` and `privateKey` in `settings_sp`. Any existing certificate is replaced, so register the new SP metadata with the IDP afterwards. Then continue with step 3.
+
+Alternatively, generate one manually:
 
 ```shell
 openssl req -x509 -newkey rsa:2048 -keyout sp.key -out sp.crt -days 3650 -nodes \
