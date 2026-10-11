@@ -32,7 +32,7 @@ jobs:
 
 
   plone61py312:
-    resource_class: medium
+    resource_class: large
     docker:
       - image: webcloud7/plone-test:6.1.5.1-py312
       - image: webcloud7/keycloak-test:24.0.2
@@ -41,6 +41,7 @@ jobs:
         - KEYCLOAK_ADMIN_PASSWORD: 'admin'
         - KC_HEALTH_ENABLED: 'true'
         - KC_METRICS_ENABLED: 'true'
+        - JAVA_OPTS_KC_HEAP: '-Xms256m -Xmx768m'
 
     environment:
       PIP_FIND_LINKS: /wheelhouse/
